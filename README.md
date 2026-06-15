@@ -148,7 +148,9 @@ This project is primarily for ESP32 teaching and competition use. Keep changes:
 
 ## 📄 License
 
-This project is provided for educational and competition purposes. Third-party components (Arduino-CLI, ESP32 Arduino core, VS Code, ImDisk, drivers) remain under their respective licenses.
+DevUDisk is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) for the full text.
+
+Third-party components bundled or referenced by this project (Arduino-CLI, ESP32 Arduino core, VS Code, ImDisk, serial drivers, etc.) remain under their respective licenses.
 
 ---
 ---
@@ -301,4 +303,6 @@ D:/
 
 ## 📄 许可
 
-本项目仅供教育和竞赛使用。第三方组件（Arduino-CLI、ESP32 Arduino 核心、VS Code、ImDisk、驱动等）仍遵循其各自许可协议。
+DevUDisk 采用 **Apache License 2.0** 许可证。完整文本见 [`LICENSE`](LICENSE)。
+
+本项目附带或引用的第三方组件（Arduino-CLI、ESP32 Arduino 核心、VS Code、ImDisk、串口驱动等）仍遵循其各自许可协议。

@@ -20,6 +20,7 @@ D:/
 ├── .git/                                         # Git 仓库
 ├── .gitignore                                    # Git 忽略规则
 ├── AGENTS.md                                     # 本文件（项目代理指南）
+├── LICENSE                                       # Apache License 2.0
 ├── README.md                                     # 项目双语说明（GitHub 入口）
 ├── Doc/                                          # 用户说明文档
 │   └── DevUDisk_User_QuickStart_v1.0.md          # 5 分钟上手指南
