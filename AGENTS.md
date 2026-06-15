@@ -41,7 +41,10 @@ D:/
 │   ├── VSCode/                                   # VS Code 便携版（启用 data 目录）
 │   │   ├── Code.exe
 │   │   └── data/                                 # 便携配置、插件、用户数据
-│   ├── ImDisk/                                   # ImDisk 占位目录（当前仅有下载失败的 HTML 文件）
+│   ├── ImDisk/                                   # RAMDisk 工具目录
+│   │   ├── aim_cli/                              # Arsenal Image Mounter 命令行工具（含 aim_ll.exe、aimapi.dll）
+│   │   ├── RamService.exe                        # Arsenal RAM-disk 服务程序（备用）
+│   │   └── RamdiskUI.exe                         # Arsenal RAM-disk GUI 配置工具（备用）
 │   └── Drivers/                                  # 串口驱动
 │       ├── CH343/CH341SER/                       # CH343/CH340 驱动
 │       └── CP210x/                               # CP210x 驱动
@@ -72,7 +75,7 @@ D:/
 | 编辑器 | VS Code 便携版 | 通过 `VSCode\data` 目录锁定配置 |
 | 开发框架 | Arduino-ESP32 | `esp32:esp32@3.3.10-cn`，离线预装 |
 | 命令入口 | Arduino-CLI | `1.4.1`（Commit: e39419312） |
-| 编译加速 | RAMDisk（ImDisk，可选） | 优先 `R:\arduino_build\[ProjectName]`；无 ImDisk 时回退到 `%TEMP%\DevUDisk_build` |
+| 编译加速 | RAMDisk（Arsenal Image Mounter + aim_ll.exe，可选） | 优先 `R:\arduino_build\[ProjectName]`；无 aim_ll 时回退到 RamService/ImDisk，最后回退到 `%TEMP%\DevUDisk_build` |
 | 串口驱动 | CH343/CH340、CP210x | 位于 `PortableEnv\Drivers\` |
 
 ### 2.1 关键目录占用（实测）
@@ -96,14 +99,14 @@ D:/
 1. 通过 `%~d0` 计算 U 盘盘符。
 2. 调用 `PortableEnv\_env_init.bat` 校验环境。
 3. 设置 Arduino 环境变量（`ARDUINO_DIRECTORIES_DATA`、`ARDUINO_DIRECTORIES_USER`、`ARDUINO_DIRECTORIES_DOWNLOADS`）。
-4. 检测是否以管理员运行；若存在 `PortableEnv\ImDisk\imdisk.exe` 且为管理员，则创建 `R:` RAMDisk。
+4. 检测是否以管理员运行；若存在 `PortableEnv\ImDisk\aim_cli\x64\aim_ll.exe` 且为管理员，则直接创建 `R:` RAMDisk（大小 2GB，NTFS）；否则依次回退到 RamService 服务、ImDisk。
 5. 无 RAMDisk 时回退到 `%TEMP%\DevUDisk_build`。
 6. 配置 Git：优先 U 盘内置 `PortableEnv\Git\cmd\git.exe`，其次回退到常见本机 Git 路径。
 7. 构造隔离 `PATH` 并启动 VS Code，打开 `Projects` 目录。
 
 **`StopDevEnv.bat`**：
 1. 结束 VS Code 进程。
-2. 若存在 ImDisk 且为管理员，卸载 `R:` RAMDisk。
+2. 若存在 aim_ll 且为管理员，使用 `aim_ll -d -m R:` 卸载 `R:` RAMDisk；否则依次回退到停止 RamService 服务、ImDisk。
 3. 清理 `%TEMP%\DevUDisk_build`。
 4. 调用 PowerShell 弹出 U 盘。
 
@@ -136,7 +139,10 @@ D:/
 - **`PortableEnv\Drivers\`**：串口驱动。
 - **`PortableEnv\Git\`**（可选）：Portable Git for Windows，解压后 `cmd\git.exe` 可直接使用。
 - **`PortableEnv\_build_with_progress.ps1`**：PowerShell 编译包装脚本，为 arduino-cli 提供进度点与总用时显示。
-- **`PortableEnv\ImDisk\`**：ImDisk 占位目录（当前缺少可用的 `imdisk.exe`，仅有下载失败的 HTML 文件）。
+- **`PortableEnv\ImDisk\`**：RAMDisk 工具目录。
+  - `aim_cli\x64\aim_ll.exe`：Arsenal Image Mounter 命令行工具，用于直接创建/删除 RAMDisk（推荐）。
+  - `RamService.exe` / `RamdiskUI.exe`：Arsenal RAM-disk 服务与 GUI 工具（备用回退）。
+  - `aimapi.dll`：需要复制到 `ImDisk\` 根目录，供 RamService 加载。
 
 ### 3.4 用户空间
 
@@ -206,7 +212,7 @@ arduino-cli monitor -p COM3 -b esp32:esp32:esp32
 
 ### 5.1 Batch 脚本
 
-- **编码**：Batch 脚本使用 **UTF-8 with BOM**，确保中文显示正常。
+- **编码**：Batch 脚本使用 **UTF-8 without BOM + CRLF 换行**，文件首行之后立即执行 `chcp 65001 >nul` 将控制台切换到 UTF-8，确保中文显示正常且不会被 BOM 破坏首行解析。
 - **路径解析**：使用 `%~dp0` / `%~d0` 动态计算脚本所在目录与 U 盘盘符，禁止硬编码盘符。
 - **PATH 构造**：采用“收缩式注入”，最小必要集合为：
   ```bat
@@ -222,8 +228,8 @@ arduino-cli monitor -p COM3 -b esp32:esp32:esp32
 - **用途**：`PortableEnv\_build_with_progress.ps1` 作为 arduino-cli 的编译包装脚本，提供进度点与总用时显示。
 - **编码**：保存为 **UTF-8 with BOM**，避免中文输出乱码。
 - **执行策略**：由 `tasks.json` 调用时通过 `-ExecutionPolicy Bypass` 参数绕过本地执行策略限制。
-- **进程管理**：使用 `System.Diagnostics.Process` 异步读取子进程输出，主线程通过 `Start-Sleep` 循环处理 Timer 事件，确保进度点可流动显示。
-- **清理**：在 `finally` 块中停止 Timer 并注销所有事件订阅，避免残留后台任务。
+- **进程管理**：使用 `System.Diagnostics.Process` 通过 `cmd.exe` 调用 `arduino-cli` 并重定向输出到临时文件，主线程通过 `WaitForExit(2000)` 循环打印进度点，确保退出码可靠获取且输出不与进度点混在一起。
+- **清理**：在 `finally` 块中删除临时输出文件并释放进程对象。
 
 ### 5.3 VS Code 配置
 
@@ -263,11 +269,11 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 | 环境校验 | `_env_init.bat` 通过空间/工具/核心包检查 | ✅ |
 | 路径隔离 | 启动后 `PATH` 仅包含 U 盘 arduino-cli 与最小系统路径 | ✅ |
 | 离线编译 | Blink / WiFiScan 不依赖本机 Arduino 环境编译成功 | ✅ |
-| RAMDisk 回退 | 无可用 ImDisk 时自动使用 `%TEMP%\DevUDisk_build` | ✅ |
+| RAMDisk 回退 | 无可用 aim_ll 时自动使用 `%TEMP%\DevUDisk_build` | ✅ |
 | VS Code 启动 | `StartDevEnv.bat` 成功启动 VS Code 并打开 Projects | ✅ |
 | 安全退出 | `StopDevEnv.bat` 关闭 VS Code、清理临时目录 | ✅ |
 | U 盘弹出 | 执行后可在资源管理器中安全删除 | ✅（脚本已调用 Eject） |
-| RAMDisk 加速 | 安装 ImDisk 后编译速度比 U 盘快 ≥ 30% | ⏳ 待补充 ImDisk 后实测 |
+| RAMDisk 加速 | 安装 Arsenal Image Mounter 驱动后编译速度比 U 盘快 ≥ 30% | ✅ 已实测（与本地 SSD 接近） |
 | Git 可用性 | VS Code 终端中 `git --version` 可执行 | ✅ |
 | 编译进度反馈 | 编译过程中显示流动进度点，结束后显示总用时 | ✅ |
 
@@ -275,7 +281,7 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 1. Batch 脚本语法检查（可使用 `cmd /c` 或第三方 linter）。
 2. 多盘符机器上的启动测试。
 3. 已安装 Arduino IDE 的“脏机器”隔离测试。
-4. ImDisk 安装后的 RAMDisk 速度对比测试。
+4. Arsenal Image Mounter 驱动安装后的 aim_ll RAMDisk 速度对比测试。
 5. 上传任务串口号自动检测（当前默认 `COM3`，需手动修改）。
 
 ---
@@ -294,7 +300,7 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 
 ### 7.2 已知待完善项
 
-- **ImDisk 驱动**：`PortableEnv\ImDisk\` 当前仅有下载失败的 HTML 文件，缺少可用的 `imdisk.exe`。如需 RAMDisk，需手动从 https://www.ltr-data.se/opencode.html 下载 ImDisk Toolkit 并安装驱动，然后以管理员模式运行 `StartDevEnv.bat`。
+- **Arsenal Image Mounter 驱动**：`PortableEnv\ImDisk\` 已包含 `aim_cli\x64\aim_ll.exe`（推荐）、`RamService.exe` 与 `RamdiskUI.exe`（备用）。Arsenal Image Mounter 驱动需要预先在主机上安装，安装方法参见 https://github.com/tmcdos/ramdisk 的 README（通常使用 `aim_ll.exe --install ..\..` 自动安装驱动）。安装驱动后，以管理员模式运行 `StartDevEnv.bat` 即可自动创建 `R:` RAMDisk。
 - **ESP-IDF 支持**：本机 `C:\Espressif` 可作为二期移植来源。
 - **AI 辅助**：Continue 插件尚未预装，需联网下载 `.vsix` 后离线安装。
 - **Portable Git**：脚本已支持自动识别 `PortableEnv\Git\cmd\git.exe`；如交付盘尚未内置，可从 https://git-scm.com/download/win 下载 64-bit Portable 版并解压到 `PortableEnv\Git\`。
@@ -316,7 +322,7 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 | U 盘异常拔出 | 源码始终保存在 U 盘；RAMDisk/临时目录仅用于构建中间文件 |
 | 杀毒软件误报 | 提前将 U 盘路径加入机房白名单 |
 | 路径泄露 | 脚本中严格使用 `%~dp0` 与隔离 `PATH`，避免调用本机开发工具 |
-| ImDisk 驱动未安装 | 提供无 RAMDisk 降级模式，并文档说明手动安装方式 |
+| Arsenal Image Mounter 驱动未安装 | 提供无 RAMDisk 降级模式，并文档说明使用 `aim_ll.exe --install` 手动安装驱动 |
 | 默认串口号不匹配 | 用户上传前需根据设备管理器修改 `tasks.json` 中的 `--port` |
 
 ---
@@ -327,5 +333,5 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 - 当前仓库没有 `pyproject.toml`、`package.json`、`Cargo.toml` 或 CI/CD 配置文件。
 - 由于项目面向教学场景，脚本与文档应优先保证**可读性**和**可维护性**，避免过度工程化。
 - 若需引入新依赖，必须确保其能运行在便携/离线环境中。
-- Batch 脚本涉及中文时，务必保存为 **UTF-8 with BOM**。
+- Batch 脚本涉及中文时，保存为 **UTF-8 without BOM + CRLF 换行**，并在 `@echo off` 后立即执行 `chcp 65001 >nul` 切换到 UTF-8 代码页。实测 UTF-8 with BOM 会被 cmd 解析为首行乱码命令。
 - 修改 `.gitignore`、`AGENTS.md`、文档结构或脚本接口后，应同步更新相关文档。
