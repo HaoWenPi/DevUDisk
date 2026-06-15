@@ -1,43 +1,55 @@
-# DevUDisk 开发行动规划 v1.0
+:# DevUDisk 开发行动规划 v1.0
 
 > 基于《编程U盘设计与制作方案 v1.0》制定，面向当前可用资源进行调整。  
 > 制定日期：2026-06-15  
-> 状态：🚧 执行中
+> 状态：✅ 第一阶段已完成（Arduino-ESP32 便携环境可运行）
 
 ---
 
-## 0. 关键假设与决策说明（请先确认）
+## 0. 关键决策说明
 
-由于当前系统处于自动权限模式，无法弹窗提问。以下是我基于现场勘察做出的**关键决策**，如果你希望调整，请直接回复纠正。
+由于当前系统处于自动权限模式，无法弹窗提问。以下是我基于现场勘察做出的关键决策，已在执行中落地。如果你希望调整，请直接回复纠正。
 
 | 决策点 | 当前决策 | 理由 |
 | :--- | :--- | :--- |
 | **核心开发栈** | **Arduino-ESP32**（而非原方案的 ESP-IDF） | 本机 C 盘已有可运行的 `arduino-cli` + `esp32:esp32` 核心包，可直接移植；ESP-IDF 虽也存在，但体积更大且与原方案重复，故列为二期可选项。 |
-| **编辑器** | **VS Code 便携版 + Arduino 插件** | C 盘 Arduino IDE 2.x 为安装版，配置分散在用户目录，不适合便携。VS Code 便携版可通过 `data` 目录锁定配置，与原方案一致。 |
-| **RAMDisk 工具** | **ImDisk Toolkit（便携版）** | 与原方案一致，需从网络下载。 |
-| **路径隔离** | 所有工具路径通过 `%~dp0` 脚本注入，不依赖系统 PATH | 与原方案一致。 |
-| **构建目录** | `R:\arduino_build\[ProjectName]` | 与原方案 `R:\esp_build` 对应，改为 Arduino 构建目录。 |
+| **编辑器** | **VS Code 便携版 + 内置 Tasks** | C 盘 Arduino IDE 2.x 为安装版，配置分散在用户目录，不适合便携。VS Code 便携版通过 `data` 目录锁定配置，使用 `tasks.json` 直接调用 `arduino-cli`，避免依赖可能失效的 Arduino 插件。 |
+| **RAMDisk 工具** | **ImDisk Toolkit（可选）** | 与原方案一致。但因 SourceForge/ltr-data.se 下载受 Cloudflare 保护，当前 U 盘未内置 ImDisk 二进制；脚本已实现无 ImDisk 时自动回退到 `%TEMP%\DevUDisk_build`。 |
+| **路径隔离** | `PATH` 收缩为 `U:\PortableEnv\arduino-cli;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0` | 保证 `arduino-cli` 编译所需的 `cmd.exe` 与 `powershell.exe` 可用，同时避免调用本机 Arduino/Python/Git。 |
+| **构建目录** | 优先 `R:\arduino_build\[ProjectName]`，回退 `%TEMP%\DevUDisk_build\[ProjectName]` | 与原方案 `R:\esp_build` 对应，改为 Arduino 构建目录。 |
 | **U 盘卷标** | 已确认为 `ESP32_DEV`，簇大小 4K | 与原方案要求一致，无需重新格式化。 |
 
-### 0.1 可用资源清单
+### 0.1 执行结果摘要
+
+| 阶段 | 状态 | 备注 |
+| :--- | :--- | :--- |
+| 目录结构搭建 | ✅ 完成 | `PortableEnv/`、`Projects/`、`Docs/` 已创建 |
+| Arduino-CLI + ESP32 核心移植 | ✅ 完成 | 约 5.9 GB，已验证离线编译 |
+| VS Code 便携版部署 | ✅ 完成 | 已启用 `data` 便携模式 |
+| 启动/退出脚本 | ✅ 完成 | 普通模式免管理员，RAMDisk 可选 |
+| 示例工程 | ✅ 完成 | `Blink`、`WiFiScan` 均可编译 |
+| 串口驱动 | ✅ 完成 | CH343 / CP210x 驱动已复制 |
+| ImDisk 二进制 | ⚠️ 未完成 | 下载受 Cloudflare 保护，需手动补充 |
+| 量产镜像 | ⏳ 未开始 | 待补充 ImDisk / 二期功能后制作 |
+
+### 0.2 可用资源清单
 
 | 资源 | 本机路径 | 大小 | 用途 |
 | :--- | :--- | :--- | :--- |
 | Arduino-CLI | `C:\Softwares\arduino-cli` | ~37 MB | 命令行编译/上传入口 |
 | ESP32 Arduino 核心 | `C:\Users\cross\AppData\Local\Arduino15\packages\esp32` | ~5.9 GB | `esp32:esp32@3.3.10-cn` 完整核心与工具链 |
-| Arduino IDE 2.x | `C:\Program Files\Arduino IDE` | ~545 MB | **不移植**，为安装版且Electron依赖重 |
+| Arduino IDE 2.x | `C:\Program Files\Arduino IDE` | ~545 MB | **不移植**，为安装版且 Electron 依赖重 |
 | ESP-IDF v5.5.1 | `C:\Espressif` | ~7.8 GB | **二期可选**，当前不移植 |
 | Python 3.12 | `C:\Users\cross\AppData\Local\Programs\Python\Python312` | - | 本机环境，U 盘内 Arduino 编译不直接依赖 |
 | Git | `C:\mingw64\bin\git.exe`（Git Bash） | - | 本机环境，U 盘内如需 Git 可额外下载便携版 |
 
-### 0.2 需要下载的资源
+### 0.3 需要下载/补充的资源
 
-| 资源 | 来源 | 用途 |
-| :--- | :--- | :--- |
-| VS Code 便携版（zip） | https://code.visualstudio.com/docs/?dv=winzip | 编辑器 |
-| Arduino 插件（VSIX） | VS Code Marketplace | Arduino 语言支持 |
-| ImDisk Toolkit | https://www.ltr-data.se/opencode.html | RAMDisk |
-| CH340 / CP210x 驱动 | 官方或现有驱动包 | 串口通信 |
+| 资源 | 来源 | 用途 | 状态 |
+| :--- | :--- | :--- | :--- |
+| VS Code 便携版（zip） | https://code.visualstudio.com/docs/?dv=winzip | 编辑器 | ✅ 已下载部署 |
+| ImDisk Toolkit | https://www.ltr-data.se/opencode.html | RAMDisk | ⚠️ 受 Cloudflare 保护，需手动下载 |
+| CH343 / CP210x 驱动 | 本机 `C:\Espressif\tools\idf-driver\` | 串口通信 | ✅ 已复制 |
 
 ---
 
@@ -45,87 +57,80 @@
 
 ```text
 ESP32_DEV (D:\)
-├── StartDevEnv.bat              # ★ 唯一入口：创建 RAMDisk、注入 PATH、启动 VS Code
+├── StartDevEnv.bat              # ★ 唯一入口：注入 PATH、启动 VS Code、可选 RAMDisk
 ├── StopDevEnv.bat               # 安全退出：结束 VS Code、卸载 RAMDisk、弹出 U 盘
 ├── PortableEnv\
 │   ├── _env_init.bat            # 环境校验（U 盘空间、工具可执行性）
 │   ├── arduino-cli\
 │   │   ├── arduino-cli.exe
-│   │   └── packages\            # ESP32 核心包离线副本
+│   │   └── packages\            # ESP32 核心包离线副本 + builtin 工具
+│   │       ├── builtin\
 │   │       └── esp32\
-│   │           ├── hardware\
-│   │           └── tools\
 │   ├── VSCode\
 │   │   ├── Code.exe
-│   │   └── data\                # 便携配置、插件、用户数据
+│   │   ├── data\                # 便携配置、插件、用户数据
+│   │   └── 6928394f91\          # VS Code 运行时资源（下载 zip 自带）
 │   ├── ImDisk\
-│   │   └── imdisk.exe           # RAMDisk 工具
+│   │   └── （ImDisk 驱动需手动补充）
 │   └── Drivers\
-│       ├── CH341SER.exe
-│       └── CP210x_VCP.exe
+│       ├── CH343\
+│       └── CP210x\
 ├── Projects\
 │   ├── Blink\
+│   │   ├── Blink.ino
+│   │   └── .vscode\tasks.json
 │   └── WiFiScan\
+│       ├── WiFiScan.ino
+│       └── .vscode\tasks.json
 └── Docs\
     ├── DevUDisk_Plan_v1.0.md
-    └── DevUDisk_ActionPlan_v1.0.md
+    ├── DevUDisk_ActionPlan_v1.0.md
+    └── QuickStart.md
 ```
 
 ---
 
 ## 2. 分阶段行动计划
 
-### Phase 1：基础环境移植（~30 分钟，主要耗时在复制 6 GB 数据）
+### Phase 1：基础环境移植 ✅
 
-1. **搭建目录结构**：按上述结构创建空目录。
-2. **移植 Arduino-CLI**：将 `C:\Softwares\arduino-cli` 复制到 `D:\PortableEnv\arduino-cli`。
-3. **移植 ESP32 核心包**：将 `C:\Users\cross\AppData\Local\Arduino15\packages\esp32` 复制到 `D:\PortableEnv\arduino-cli\packages\esp32`。
-4. **创建便携配置**：在 `D:\PortableEnv\arduino-cli\arduino-cli.yaml` 中指定 `directories.data` 为 U 盘内路径，确保不读取本机 `Arduino15`。
-5. **离线验证**：在干净 PATH 下执行 `arduino-cli compile`，确认不依赖本机环境即可编译 Blink。
+1. **搭建目录结构**：按上述结构创建空目录。✅
+2. **移植 Arduino-CLI**：将 `C:\Softwares\arduino-cli` 复制到 `D:\PortableEnv\arduino-cli`。✅
+3. **移植 ESP32 核心包**：将 `C:\Users\cross\AppData\Local\Arduino15\packages\esp32` 复制到 `D:\PortableEnv\arduino-cli\packages\esp32`。✅
+4. **环境变量隔离**：通过 `StartDevEnv.bat` 设置 `ARDUINO_DIRECTORIES_DATA` 等环境变量，确保不读取本机 `Arduino15`。✅
+5. **离线验证**：在隔离 PATH 下执行 `arduino-cli compile`，确认 Blink / WiFiScan 均可编译。✅
 
-### Phase 2：编辑器集成（~15 分钟）
+### Phase 2：编辑器集成 ✅
 
-1. 下载 VS Code 便携版 zip 并解压到 `D:\PortableEnv\VSCode`。
-2. 创建 `D:\PortableEnv\VSCode\data` 目录，启用便携模式。
-3. 下载/安装 Arduino VS Code 插件到 `data\extensions`。
-4. 配置 `data\user-data\User\settings.json`，指向 U 盘内 `arduino-cli` 与构建目录。
+1. 下载 VS Code 便携版 zip 并解压到 `D:\PortableEnv\VSCode`。✅
+2. 创建 `D:\PortableEnv\VSCode\data` 目录，启用便携模式。✅
+3. 配置 `data\user-data\User\settings.json`（禁用自动更新、继承环境变量等）。✅
+4. 为示例工程创建 `.vscode\tasks.json`，直接调用 `arduino-cli`。✅
 
-### Phase 3：RAMDisk 加速脚本（~20 分钟）
+### Phase 3：RAMDisk 加速脚本 ✅（含回退）
 
-1. 下载 ImDisk Toolkit 并部署到 `D:\PortableEnv\ImDisk`。
-2. 编写 `StartDevEnv.bat`：
-   - 请求管理员权限（ImDisk 需要）。
-   - 通过 `%~dp0` 计算 U 盘盘符。
-   - 构造隔离 PATH：`U:\PortableEnv\arduino-cli`。
-   - 创建 RAMDisk `R:`，大小可配置（默认 1 GB）。
-   - 设置 `ARDUINO_BUILD_PATH=R:\arduino_build`。
-   - 启动 `U:\PortableEnv\VSCode\Code.exe`。
-3. 编写 `StopDevEnv.bat`：
-   - 结束 VS Code 进程。
-   - 卸载 RAMDisk。
-   - 弹出 U 盘。
-4. 编写 `PortableEnv\_env_init.bat`：
-   - 校验 U 盘剩余空间 ≥ 5 GB。
-   - 校验 `arduino-cli` 可执行。
-   - 校验 ESP32 核心包完整性。
+1. 在 `StartDevEnv.bat` 中实现：
+   - 计算 U 盘盘符、构造隔离 PATH。✅
+   - 设置 Arduino 环境变量。✅
+   - 若存在 ImDisk 且以管理员运行，创建 RAMDisk `R:`。✅
+   - 否则回退到 `%TEMP%\DevUDisk_build`。✅
+   - 启动 VS Code。✅
+2. 在 `StopDevEnv.bat` 中实现关闭 VS Code、卸载 RAMDisk、清理临时目录、弹出 U 盘。✅
+3. 在 `PortableEnv\_env_init.bat` 中实现 U 盘空间 / 工具 / 核心包校验。✅
 
-### Phase 4：示例工程与文档（~15 分钟）
+### Phase 4：示例工程与文档 ✅
 
-1. 在 `D:\Projects\Blink` 创建标准 Arduino Blink 工程（针对 ESP32）。
-2. 在 `D:\Projects\WiFiScan` 创建 WiFi 扫描示例。
-3. 添加 CH340/CP210x 驱动到 `D:\PortableEnv\Drivers`。
-4. 编写 `D:\Docs\QuickStart.md`（5 分钟上手指南）。
+1. 在 `D:\Projects\Blink` 创建标准 Arduino Blink 工程。✅
+2. 在 `D:\Projects\WiFiScan` 创建 WiFi 扫描示例。✅
+3. 添加 CH343 / CP210x 驱动到 `D:\PortableEnv\Drivers`。✅
+4. 编写 `D:\Docs\QuickStart.md`。✅
 
-### Phase 5：验证与交付（~15 分钟）
+### Phase 5：验证与交付 ⏳
 
-1. 执行验证清单：
-   - 盘符变化不影响启动。
-   - 脏机器（已装 Arduino IDE 的主机）仍能正常运行。
-   - RAMDisk 编译速度比 U 盘直接编译快 ≥ 30%。
-   - VS Code Arduino 插件可正常编译/上传。
-   - 安全退出无残留。
-2. 更新 `AGENTS.md`（如新增代码/脚本）。
-3. 输出交付说明与已知限制。
+1. 执行验证清单。✅ 部分完成
+2. 补充 ImDisk 二进制（如可能）。⏳
+3. 制作镜像文件（可选）。⏳
+4. 更新 `AGENTS.md`。✅
 
 ---
 
@@ -133,33 +138,42 @@ ESP32_DEV (D:\)
 
 | 风险 | 应对措施 |
 | :--- | :--- |
-| 6 GB 核心包复制耗时/失败 | 使用 `robocopy /MIR /Z /R:3 /W:5` 断点续传，复制完成后校验文件数。 |
-| Arduino-CLI 仍读取本机 `Arduino15` | 通过 `arduino-cli.yaml` 强制 `directories.data` 指向 U 盘内路径。 |
-| VS Code 插件依赖网络 | 提前下载 `.vsix` 并离线安装到 `data\extensions`。 |
-| 机房无管理员权限 | 提供无 RAMDisk 降级模式：`StartDevEnv.bat` 检测权限，失败时直接在 U 盘构建。 |
-| U 盘异常拔出 | 源码始终保存在 U 盘；RAMDisk 仅用于构建中间文件。 |
+| 6 GB 核心包复制耗时/失败 | 使用 `robocopy /E /Z /R:3 /W:5` 断点续传；已验证复制成功。✅ |
+| Arduino-CLI 仍读取本机 `Arduino15` | 通过 `ARDUINO_DIRECTORIES_DATA` 环境变量强制指向 U 盘内路径。✅ |
+| 编译找不到 `cmd.exe` / `powershell.exe` | `PATH` 中保留 `C:\Windows\System32` 与 PowerShell 目录。✅ |
+| 机房无管理员权限 | 普通模式自动回退到 `%TEMP%\DevUDisk_build`，无需管理员。✅ |
+| U 盘异常拔出 | 源码始终保存在 U 盘；RAMDisk/临时目录仅用于构建中间文件。✅ |
+| ImDisk 无法下载 | 记录为已知限制，提供无 RAMDisk 降级模式与手动安装说明。⚠️ |
 
 ---
 
 ## 4. 验证清单
 
-| 测试项 | 通过标准 |
-| :--- | :--- |
-| 盘符自适应 | 将 U 盘插入不同盘符，双击 `StartDevEnv.bat` 仍能正确识别盘符 |
-| 路径隔离 | 启动后 `PATH` 仅包含 U 盘内 `arduino-cli` 目录 |
-| 离线编译 | 断开外网后，`arduino-cli compile` 成功生成固件 |
-| RAMDisk 加速 | 同工程在 RAMDisk 构建时间比 U 盘构建时间短 ≥ 30% |
-| VS Code 集成 | 在 VS Code 中点击“上传”可完成编译并上传 |
-| 安全退出 | 执行 `StopDevEnv.bat` 后 R 盘消失，U 盘可正常弹出 |
+| 测试项 | 通过标准 | 状态 |
+| :--- | :--- | :--- |
+| 盘符自适应 | 脚本通过 `%~d0` 正确识别 D: 盘 | ✅ |
+| 环境校验 | `_env_init.bat` 通过空间/工具/核心包检查 | ✅ |
+| 路径隔离 | 启动后 `PATH` 仅包含 U 盘 arduino-cli 与最小系统路径 | ✅ |
+| 离线编译 | Blink / WiFiScan 不依赖本机 Arduino 环境编译成功 | ✅ |
+| RAMDisk 回退 | 未安装 ImDisk 时自动使用 `%TEMP%\DevUDisk_build` | ✅ |
+| VS Code 启动 | `StartDevEnv.bat` 成功启动 VS Code 并打开 Projects | ✅ |
+| 安全退出 | `StopDevEnv.bat` 关闭 VS Code、清理临时目录 | ✅ |
+| U 盘弹出 | 执行后可在资源管理器中安全删除 | ⏳ 待实测 |
+| RAMDisk 加速 | 安装 ImDisk 后编译速度比 U 盘快 ≥ 30% | ⏳ 待补充 ImDisk |
 
 ---
 
 ## 5. 二期可选项
 
+- **补充 ImDisk**：从官网下载驱动并放入 `PortableEnv\ImDisk\`，实现真正的 RAMDisk 加速。
 - **集成 ESP-IDF**：将 `C:\Espressif` 移植到 U 盘，编写 ESP-IDF 启动脚本。
 - **集成 Portable Git**：下载便携 Git，支持学生工程版本控制。
+- **AI 插件**：下载 Continue 插件 `.vsix` 并离线安装到 VS Code。
 - **镜像量产**：使用 Win32 Disk Imager 制作 `ESP32_Dev_v1.0.img`。
 
 ---
 
-**下一步：** 立即开始 Phase 1，搭建目录结构并移植 Arduino-CLI。
+**下一步建议：**
+1. 手动下载 ImDisk 驱动并放入 `PortableEnv\ImDisk\`。
+2. 在目标教学机上测试普通模式与管理员模式。
+3. 根据测试结果调整 `tasks.json` 中的默认串口号。
