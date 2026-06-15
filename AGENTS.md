@@ -32,6 +32,7 @@ D:/
 │       └── DevUDisk_Plan_DeliveryNotes_v1.0.md   # 第一阶段交付说明
 ├── PortableEnv/                                  # 便携工具链（被 .gitignore 排除）
 │   ├── _env_init.bat                             # 环境校验脚本
+│   ├── _build_with_progress.ps1                  # 带进度点与用时的编译包装脚本
 │   ├── arduino-cli/                              # Arduino-CLI 1.4.1 + ESP32 核心包
 │   │   ├── arduino-cli.exe
 │   │   └── packages/
@@ -86,7 +87,7 @@ D:/
 ### 2.2 核心运行原则
 
 1. **Zero Installation**：不依赖主机安装任何软件；普通用户模式即可编译，管理员权限仅用于创建/卸载 RAMDisk。
-2. **Path Isolation**：`StartDevEnv.bat` 将 `PATH` 收缩为 `U:\PortableEnv\arduino-cli;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0`，避免调用本机 Arduino/Python/Git。
+2. **Path Isolation**：`StartDevEnv.bat` 将 `PATH` 收缩为 `U:\PortableEnv\arduino-cli;U:\PortableEnv\Git\cmd（如存在）;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0`。优先使用 U 盘内置 Git，缺失时回退到本机 Git 固定路径，避免调用本机 Arduino/Python 等其他工具。
 3. **Performance First**：源码保留在 U 盘；优先在 RAMDisk 构建，其次回退到本地临时目录，避免 U 盘 I/O 瓶颈。
 
 ### 2.3 脚本执行流程
@@ -97,7 +98,8 @@ D:/
 3. 设置 Arduino 环境变量（`ARDUINO_DIRECTORIES_DATA`、`ARDUINO_DIRECTORIES_USER`、`ARDUINO_DIRECTORIES_DOWNLOADS`）。
 4. 检测是否以管理员运行；若存在 `PortableEnv\ImDisk\imdisk.exe` 且为管理员，则创建 `R:` RAMDisk。
 5. 无 RAMDisk 时回退到 `%TEMP%\DevUDisk_build`。
-6. 构造隔离 `PATH` 并启动 VS Code，打开 `Projects` 目录。
+6. 配置 Git：优先 U 盘内置 `PortableEnv\Git\cmd\git.exe`，其次回退到常见本机 Git 路径。
+7. 构造隔离 `PATH` 并启动 VS Code，打开 `Projects` 目录。
 
 **`StopDevEnv.bat`**：
 1. 结束 VS Code 进程。
@@ -109,8 +111,9 @@ D:/
 1. 校验 U 盘剩余空间 >= 5 GB。
 2. 校验 `arduino-cli.exe` 是否存在。
 3. 校验 ESP32 Arduino 核心包是否存在。
-4. 校验 VS Code 便携版是否存在（不存在仅警告）。
-5. 打印 Arduino-CLI 版本。
+4. 校验 Git（可选）：若存在 U 盘内置 Git 则提示，否则给出放置指引。
+5. 校验 VS Code 便携版是否存在（不存在仅警告）。
+6. 打印 Arduino-CLI 版本。
 
 ---
 
@@ -124,12 +127,15 @@ D:/
 ### 3.2 环境初始化
 
 - **`PortableEnv\_env_init.bat`**：校验 U 盘剩余空间、Arduino-CLI 可执行性、ESP32 核心包完整性、VS Code 便携版存在性。
+- **`PortableEnv\_git_failsafe.bat`**：Git 仓库自检脚本。检查 `.git` 目录完整性，自动备份关键元数据（config, HEAD, index, refs）到 `PortableEnv\git_recovery`。在检测到损坏或丢失时，自动从最近备份恢复。
 
 ### 3.3 工具目录
 
 - **`PortableEnv\arduino-cli\`**：Arduino-CLI 与 ESP32 核心包。
 - **`PortableEnv\VSCode\`**：VS Code 便携版，配置锁定在 `data` 目录。
 - **`PortableEnv\Drivers\`**：串口驱动。
+- **`PortableEnv\Git\`**（可选）：Portable Git for Windows，解压后 `cmd\git.exe` 可直接使用。
+- **`PortableEnv\_build_with_progress.ps1`**：PowerShell 编译包装脚本，为 arduino-cli 提供进度点与总用时显示。
 - **`PortableEnv\ImDisk\`**：ImDisk 占位目录（当前缺少可用的 `imdisk.exe`，仅有下载失败的 HTML 文件）。
 
 ### 3.4 用户空间
@@ -157,8 +163,9 @@ D:/
 在 VS Code 内通过任务完成。每个工程目录下的 `.vscode\tasks.json` 定义了两个任务：
 
 - **`Arduino: Build (RAMDisk)`**（默认构建任务，`Ctrl + Shift + B`）：
+  调用 `PortableEnv\_build_with_progress.ps1` 包装脚本执行 arduino-cli 编译，输出进度点与总用时：
   ```bat
-  arduino-cli compile --fqbn esp32:esp32:esp32 --build-path %ARDUINO_BUILD_BASE%\[ProjectName] --output-dir [Project]\build .
+  powershell -NoProfile -ExecutionPolicy Bypass -File %U_DISK%\PortableEnv\_build_with_progress.ps1 -Cli %U_DISK%\PortableEnv\arduino-cli\arduino-cli.exe -Fqbn esp32:esp32:esp32 -Libs "" -BuildPath %ARDUINO_BUILD_BASE%\[ProjectName] -Output-dir [Project]\build -SketchDir [Project]
   ```
 - **`Arduino: Upload`**：
   ```bat
@@ -203,13 +210,22 @@ arduino-cli monitor -p COM3 -b esp32:esp32:esp32
 - **路径解析**：使用 `%~dp0` / `%~d0` 动态计算脚本所在目录与 U 盘盘符，禁止硬编码盘符。
 - **PATH 构造**：采用“收缩式注入”，最小必要集合为：
   ```bat
-  set PATH=U:\PortableEnv\arduino-cli;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0
+  set PATH=U:\PortableEnv\arduino-cli;U:\PortableEnv\Git\cmd;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0
   ```
+  当 U 盘未内置 Git 且检测到本机 Git 时，可临时加入本机 Git 固定路径作为回退，但需在启动日志中明确提示。
 - **禁止行为**：不要使用 `where python`、`where git`、`dir /s` 等依赖系统搜索的命令。
 - **管理员权限**：仅在创建/卸载 RAMDisk 时请求管理员权限；普通模式自动回退到本地临时构建目录。
 - **错误处理**：使用 `if %errorlevel% neq 0` 检查关键步骤返回值，失败时给出明确提示并暂停。
 
-### 5.2 VS Code 配置
+### 5.2 PowerShell 脚本
+
+- **用途**：`PortableEnv\_build_with_progress.ps1` 作为 arduino-cli 的编译包装脚本，提供进度点与总用时显示。
+- **编码**：保存为 **UTF-8 with BOM**，避免中文输出乱码。
+- **执行策略**：由 `tasks.json` 调用时通过 `-ExecutionPolicy Bypass` 参数绕过本地执行策略限制。
+- **进程管理**：使用 `System.Diagnostics.Process` 异步读取子进程输出，主线程通过 `Start-Sleep` 循环处理 Timer 事件，确保进度点可流动显示。
+- **清理**：在 `finally` 块中停止 Timer 并注销所有事件订阅，避免残留后台任务。
+
+### 5.3 VS Code 配置
 
 VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json`，当前关键配置包括：
 - 禁用自动更新和扩展自动检查更新。
@@ -219,13 +235,13 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 
 修改 VS Code 配置时应保持便携模式，避免依赖本机用户目录。
 
-### 5.3 Arduino 工程
+### 5.4 Arduino 工程
 
 - 每个工程独立目录，目录名与 `.ino` 主文件名一致（如 `Blink\Blink.ino`）。
 - 工程内 `.vscode\tasks.json` 使用环境变量 `${env:U_DISK}` 和 `${env:ARDUINO_BUILD_BASE}`，避免硬编码盘符。
 - 默认开发板型号为 `esp32:esp32:esp32`（ESP32 DevKit）。
 
-### 5.4 文档
+### 5.5 文档
 
 - 项目主要使用**中文**编写方案与说明。
 - 文档分两类存放：
@@ -252,6 +268,8 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 | 安全退出 | `StopDevEnv.bat` 关闭 VS Code、清理临时目录 | ✅ |
 | U 盘弹出 | 执行后可在资源管理器中安全删除 | ✅（脚本已调用 Eject） |
 | RAMDisk 加速 | 安装 ImDisk 后编译速度比 U 盘快 ≥ 30% | ⏳ 待补充 ImDisk 后实测 |
+| Git 可用性 | VS Code 终端中 `git --version` 可执行 | ✅ |
+| 编译进度反馈 | 编译过程中显示流动进度点，结束后显示总用时 | ✅ |
 
 建议后续补充：
 1. Batch 脚本语法检查（可使用 `cmd /c` 或第三方 linter）。
@@ -270,15 +288,16 @@ VS Code 便携配置位于 `PortableEnv\VSCode\data\user-data\User\settings.json
 2. 复制 Arduino-CLI 与 ESP32 核心包到 `PortableEnv\arduino-cli\packages\`。
 3. 解压 VS Code 便携版到 `PortableEnv\VSCode\`，创建 `data` 目录启用便携模式。
 4. 复制 CH343/CH340 与 CP210x 驱动到 `PortableEnv\Drivers\`。
-5. 编写并放置 `StartDevEnv.bat`、`StopDevEnv.bat`、`PortableEnv\_env_init.bat`。
-6. 创建示例工程 `Projects\Blink`、`Projects\WiFiScan` 与 VS Code 任务。
+5. （可选）将 Portable Git for Windows 解压到 `PortableEnv\Git\`，确保 `PortableEnv\Git\cmd\git.exe` 存在。
+6. 编写并放置 `StartDevEnv.bat`、`StopDevEnv.bat`、`PortableEnv\_env_init.bat`、`PortableEnv\_build_with_progress.ps1`。
+7. 创建示例工程 `Projects\Blink`、`Projects\WiFiScan` 与 VS Code 任务。
 
 ### 7.2 已知待完善项
 
 - **ImDisk 驱动**：`PortableEnv\ImDisk\` 当前仅有下载失败的 HTML 文件，缺少可用的 `imdisk.exe`。如需 RAMDisk，需手动从 https://www.ltr-data.se/opencode.html 下载 ImDisk Toolkit 并安装驱动，然后以管理员模式运行 `StartDevEnv.bat`。
 - **ESP-IDF 支持**：本机 `C:\Espressif` 可作为二期移植来源。
 - **AI 辅助**：Continue 插件尚未预装，需联网下载 `.vsix` 后离线安装。
-- **Portable Git**：如需对学生工程进行版本控制，可补充便携 Git。
+- **Portable Git**：脚本已支持自动识别 `PortableEnv\Git\cmd\git.exe`；如交付盘尚未内置，可从 https://git-scm.com/download/win 下载 64-bit Portable 版并解压到 `PortableEnv\Git\`。
 - **量产镜像**：尚未制作 `ESP32_Dev_v1.0.img`。
 
 ### 7.3 量产方案

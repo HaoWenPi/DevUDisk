@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal EnableDelayedExpansion
 
 :: ============================================================
@@ -15,6 +15,8 @@ set "U_DISK_ROOT=%U_DISK%\"
 echo [INFO] U 盘盘符：%U_DISK%
 
 :: 2. 环境初始化校验
+echo [INFO] 正在执行 Git Failsafe 自检...
+call "%~dp0PortableEnv\_git_failsafe.bat"
 call "%~dp0PortableEnv\_env_init.bat"
 if %errorlevel% neq 0 (
     echo [ERROR] 环境初始化失败。
@@ -29,7 +31,7 @@ set "ARDUINO_DIRECTORIES_DOWNLOADS=%U_DISK%\PortableEnv\arduino-cli\staging"
 echo [INFO] Arduino 数据目录：%ARDUINO_DIRECTORIES_DATA%
 
 :: 4. 判断当前是否拥有管理员权限
-net session >/dev/null 2>&1
+net session >nul 2>&1
 set "IS_ADMIN=0"
 if %errorlevel% equ 0 set "IS_ADMIN=1"
 
@@ -64,11 +66,32 @@ if %USE_RAMDISK% equ 0 (
 if not exist "%ARDUINO_BUILD_BASE%" mkdir "%ARDUINO_BUILD_BASE%"
 echo [INFO] 构建根目录：%ARDUINO_BUILD_BASE%
 
-:: 7. 构造隔离 PATH（仅包含 U 盘内工具与最小系统路径），在启动 VS Code 前生效
-set "PATH=%U_DISK%\PortableEnv\arduino-cli;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0"
+:: 7. 配置 Git：优先 U 盘内置 Portable Git，其次回退到常见本机 Git 路径
+set "GIT_BIN_DIR="
+if exist "%U_DISK%\PortableEnv\Git\cmd\git.exe" (
+    set "GIT_BIN_DIR=%U_DISK%\PortableEnv\Git\cmd"
+    echo [INFO] 已启用 U 盘内置 Git。
+) else if exist "C:\Program Files\Git\cmd\git.exe" (
+    set "GIT_BIN_DIR=C:\Program Files\Git\cmd"
+    echo [WARN] 未找到 U 盘内置 Git，已回退到本机 Git：!GIT_BIN_DIR!
+    echo [WARN] 建议将 Portable Git 解压到 %U_DISK%\PortableEnv\Git\ 以获得完全便携体验。
+) else if exist "C:\Program Files (x86)\Git\cmd\git.exe" (
+    set "GIT_BIN_DIR=C:\Program Files (x86)\Git\cmd"
+    echo [WARN] 未找到 U 盘内置 Git，已回退到本机 Git：!GIT_BIN_DIR!
+    echo [WARN] 建议将 Portable Git 解压到 %U_DISK%\PortableEnv\Git\ 以获得完全便携体验。
+) else (
+    echo [WARN] 未找到 Git。VS Code 终端中将无法使用 git 命令。
+)
+
+:: 8. 构造隔离 PATH（仅包含 U 盘内工具、Git 与最小系统路径），在启动 VS Code 前生效
+if defined GIT_BIN_DIR (
+    set "PATH=%U_DISK%\PortableEnv\arduino-cli;!GIT_BIN_DIR!;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0"
+) else (
+    set "PATH=%U_DISK%\PortableEnv\arduino-cli;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0"
+)
 echo [INFO] PATH 已隔离：%PATH%
 
-:: 8. 启动 VS Code: 并打开多工程工作区
+:: 9. 启动 VS Code: 并打开多工程工作区
 start "" "%U_DISK%\PortableEnv\VSCode\Code.exe" "%U_DISK%\DevUDisk.code-workspace"
 
 echo [INFO] 开发环境已启动。

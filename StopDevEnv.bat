@@ -13,6 +13,8 @@ set "U_DISK=%~d0"
 echo [INFO] U 盘盘符：%U_DISK%
 
 :: 2. 结束 VS Code 进程
+echo [INFO] 正在备份 Git 关键状态...
+call "%~dp0PortableEnv\_git_failsafe.bat"
 echo [INFO] 正在关闭 VS Code...
 taskkill /F /IM Code.exe >/dev/null 2>&1
 C:\Windows\System32\timeout.exe /t 2 >/dev/null

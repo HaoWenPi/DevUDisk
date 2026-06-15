@@ -5,6 +5,9 @@
         },
         {
             "path": "Projects/WiFiScan"
+        },
+        {
+            "path": "Projects/MUS4_FW"
         }
     ],
     "settings": {}
