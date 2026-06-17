@@ -220,6 +220,7 @@ echo [INFO] PATH 已隔离：%PATH%
 :: 9. 启动 VS Code: 并打开多工程工作区
 start "" "%U_DISK%\PortableEnv\VSCode\Code.exe" "%U_DISK%\DevUDisk.code-workspace"
 echo [INFO] 开发环境已启动。
+goto :eof
 
 :: ============================================================
 :: 子例程：选择可用 RAMDisk 盘符
