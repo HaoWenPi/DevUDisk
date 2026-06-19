@@ -1,6 +1,8 @@
 # DevUDisk RAMDisk 静默创建设计
 
 > 本文档说明如何在 `StartDevEnv.bat` 中屏蔽 RAMDisk 创建后资源管理器自动弹窗的问题。
+>
+> **注意**：自本版本起，RAMDisk 不再是默认行为。默认使用本地 SSD 缓存（`%TEMP%\DevUDisk_build`），SSD 不可用时 fallback 到 U 盘缓存（`%U_DISK%\DevUDisk_cache\build`）。RAMDisk 仅作为可选加速方案，通过 `PortableEnv\DevUDisk.ini` 中的 `use_ramdisk=true` 显式启用。
 
 ## 1. 背景
 

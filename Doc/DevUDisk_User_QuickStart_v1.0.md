@@ -10,13 +10,15 @@
 
 打开文件资源管理器，进入 U 盘根目录，**双击 `StartDevEnv.bat`**。
 
-- 首次使用或需要 RAMDisk 加速时，建议**右键 → 以管理员身份运行**。
-- 普通用户模式下，构建目录会自动回退到本地临时目录，速度仍明显快于直接在 U 盘构建。
+- 默认使用本地 SSD 作为构建缓存，无需管理员权限即可编译。
+- 如需启用 RAMDisk 加速，编辑 `PortableEnv\DevUDisk.ini` 设置 `use_ramdisk=true`，然后**右键 → 以管理员身份运行**。
+- 若本地 SSD 空间不足或不可写，构建目录会自动 fallback 到 U 盘缓存目录（`U:\DevUDisk_cache\build`）。
 
 脚本会：
 1. 自动识别 U 盘盘符（D:、E:、F: 等均可）。
-2. 校验 U 盘内 Arduino 环境完整性。
-3. 启动 VS Code: 便携版并打开 **`DevUDisk.code-workspace`** 工作区（包含 Blink、WiFiScan 等示例工程）。
+2. 读取 `PortableEnv\DevUDisk.ini` 决定构建缓存策略（SSD / U 盘 / RAMDisk）。
+3. 校验 U 盘内 Arduino 环境完整性。
+4. 启动 VS Code: 便携版并打开 **`DevUDisk.code-workspace`** 工作区（包含 Blink、WiFiScan 等示例工程）。
 
 ## 3. 打开示例工程
 
@@ -89,11 +91,27 @@ git clone git@github.com:DonkeyDrift/MUS4_FW.git
 完成开发后，双击 U 盘根目录的 **`StopDevEnv.bat`**：
 
 - 关闭 VS Code。
-- 卸载 RAMDisk（如以管理员身份运行）。
-- 清理本地临时构建目录。
+- 卸载 RAMDisk（如果本次启用了 RAMDisk）。
+- 保留本地 SSD / U 盘构建缓存，以便下次启动加速。
 - 弹出 U 盘。
 
 待提示"可以安全拔出 U 盘"后再拔出。
+
+## 9. 构建缓存位置（进阶）
+
+DevUDisk 默认将编译中间文件放在本地 SSD（`%TEMP%\DevUDisk_build`），ccache 缓存放在 `%TEMP%\DevUDisk_ccache`。退出时这些目录不会被删除，跨会话复用可显著减少后续编译时间。
+
+如果本地 SSD 剩余空间低于 `PortableEnv\DevUDisk.ini` 中的 `min_free_gb`（默认 2 GB），或 `%TEMP%` 不可写，会自动 fallback 到 U 盘：
+
+- 构建目录：`U:\DevUDisk_cache\build`
+- ccache 目录：`U:\DevUDisk_cache\ccache`
+
+如需强制启用 RAMDisk，编辑 `PortableEnv\DevUDisk.ini`：
+
+```ini
+[build]
+use_ramdisk=true
+```
 
 ---
 
@@ -105,8 +123,16 @@ git clone git@github.com:DonkeyDrift/MUS4_FW.git
 ### Q2：编译提示找不到 `cmd` 或 `powershell`
 请确保 `StartDevEnv.bat` 中 PATH 包含 `C:\Windows\System32` 和 PowerShell 目录（默认已配置）。
 
-### Q3：RAMDisk 没有创建
-ImDisk 驱动需要单独安装。当前版本优先使用本地临时目录作为回退方案，仍可正常使用。如需 RAMDisk，请从 ImDisk 官网下载并安装驱动后，以管理员身份运行 `StartDevEnv.bat`。
+### Q3：RAMDisk 没有创建 / 如何启用 RAMDisk
+当前版本默认使用本地 SSD 缓存，RAMDisk 作为可选加速方案。如需启用：
+
+1. 编辑 `PortableEnv\DevUDisk.ini`：
+   ```ini
+   [build]
+   use_ramdisk=true
+   ```
+2. 右键 `StartDevEnv.bat` → 以管理员身份运行。
+3. 若仍无法创建，请检查是否已安装 Arsenal Image Mounter 驱动或 ImDisk 驱动。
 
 ### Q4：能否同时使用本机已安装的 Arduino IDE？
 本 U 盘采用路径隔离设计，`PATH` 仅指向 U 盘内工具，不会与本机 Arduino 环境冲突。
