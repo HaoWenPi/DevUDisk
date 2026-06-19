@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal EnableDelayedExpansion
 :: ============================================================
 :: DevUDisk 开发环境安全退出脚本
-:: 职责：结束 VS Code 进程、卸载 RAMDisk（如存在）、清理临时构建目录、弹出 U 盘
+:: 职责：结束 VS Code 进程、卸载 RAMDisk（如存在）、保留 SSD/U 盘持久缓存、弹出 U 盘
 :: ============================================================
 title DevUDisk - Stopping...
 :: 1. 计算 U 盘盘符
@@ -19,6 +19,12 @@ ping -n 3 127.0.0.1 >nul
 net session >nul 2>&1
 set "IS_ADMIN=0"
 if %errorlevel% equ 0 set "IS_ADMIN=1"
+:: 3.5 读取存储策略
+set "STORAGE_TYPE=ssd"
+if exist "%TEMP%\DevUDisk_storage_type.txt" (
+    for /f "usebackq delims=" %%T in ("%TEMP%\DevUDisk_storage_type.txt") do set "STORAGE_TYPE=%%T"
+)
+
 :: 4. 卸载 RAMDisk（如果存在）
 set "AIMLL=%U_DISK%\PortableEnv\ImDisk\aim_cli\x64\aim_ll.exe"
 set "RAMSERVICE=%U_DISK%\PortableEnv\ImDisk\RamService.exe"
@@ -94,13 +100,16 @@ if exist "%IMDISK%" (
     )
 )
 :ramdisk_done
-:: 5. 清理本地临时构建目录
-echo [INFO] 正在清理临时构建目录...
-if exist "%TEMP%\DevUDisk_build" (
-    rmdir /S /Q "%TEMP%\DevUDisk_build"
+:: 5. 根据存储策略清理
+if /i "%STORAGE_TYPE%"=="ramdisk" (
+    echo [INFO] RAMDisk 已卸载，构建缓存随 RAMDisk 释放。
+) else (
+    echo [INFO] 存储策略为 %STORAGE_TYPE%，保留持久化构建缓存以提高下次启动速度。
 )
-:: 清理 RAMDisk 盘符记录文件
+
+:: 5.1 清理本次会话的临时记录文件
 if exist "%TEMP%\DevUDisk_ramdisk_letter.txt" del /Q "%TEMP%\DevUDisk_ramdisk_letter.txt" >nul 2>&1
+if exist "%TEMP%\DevUDisk_storage_type.txt" del /Q "%TEMP%\DevUDisk_storage_type.txt" >nul 2>&1
 :: 6. 弹出 U 盘
 echo [INFO] 正在弹出 U 盘 %U_DISK% ...
 powershell -NoProfile -Command "$disk='%U_DISK%'.Replace(':',''); try { (New-Object -comObject Shell.Application).Namespace(17).ParseName($disk+':').InvokeVerb('Eject') } catch { Write-Host '[WARN] 弹出 U 盘失败，请手动安全删除。' }"
